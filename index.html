@@ -1,1 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GBA Web Emulator</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Fonts: Space Mono (retro terminal vibe) + DM Sans -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
 
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Configuração de Controles (Key/Button Mapping)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">⚙ Configurar Controles</span>
+      <button id="modal-close" class="btn-icon" title="Fechar">✕</button>
+    </div>
+
+    <!-- Tabs: Teclado / Gamepad -->
+    <div class="modal-tabs">
+      <button class="tab-btn active" data-tab="keyboard">🎹 Teclado</button>
+      <button class="tab-btn" data-tab="gamepad">🎮 Controle</button>
+    </div>
+
+    <div id="tab-keyboard" class="tab-content active">
+      <p class="hint">Clique em uma ação e pressione a tecla desejada.</p>
+      <div class="mapping-grid" id="keyboard-mapping-grid">
+        <!-- Gerado dinamicamente via JS -->
+      </div>
+      <div class="modal-actions">
+        <button id="reset-keyboard" class="btn btn-secondary">↩ Restaurar Padrão</button>
+      </div>
+    </div>
+
+    <div id="tab-gamepad" class="tab-content">
+      <div id="gamepad-status" class="gamepad-status disconnected">
+        <span class="status-dot"></span>
+        <span id="gamepad-status-text">Nenhum controle detectado. Conecte e pressione qualquer botão.</span>
+      </div>
+      <p class="hint">Clique em uma ação e pressione o botão no controle físico.</p>
+      <div class="mapping-grid" id="gamepad-mapping-grid">
+        <!-- Gerado dinamicamente via JS -->
+      </div>
+      <div class="modal-actions">
+        <button id="reset-gamepad" class="btn btn-secondary">↩ Restaurar Padrão</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Slots de Save State
+     ═══════════════════════════════════════════════════════════ -->
+<div id="savestate-overlay" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title" id="savestate-modal-title">💾 Salvar Estado</span>
+      <button id="savestate-close" class="btn-icon" title="Fechar">✕</button>
+    </div>
+    <div class="slots-grid" id="slots-grid">
+      <!-- Gerado via JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TOAST NOTIFICATION
+     ═══════════════════════════════════════════════════════════ -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LAYOUT PRINCIPAL
+     ═══════════════════════════════════════════════════════════ -->
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">GBA</div>
+      <span class="brand-sub">Web Emulator</span>
+    </div>
+    <div class="header-status">
+      <span id="rom-name" class="rom-name">— Nenhuma ROM carregada —</span>
+      <span id="fps-counter" class="fps-counter">0 FPS</span>
+    </div>
+    <div class="header-controls">
+      <span id="gamepad-indicator" class="gamepad-indicator" title="Status do controle">🎮</span>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT: Sidebar + Canvas Area -->
+  <div class="app-body">
+
+    <!-- SIDEBAR ESQUERDA: Toolbar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <span class="sidebar-label">ROM</span>
+        <button class="sidebar-btn" id="btn-load-rom" title="Carregar ROM (.gba)">
+          <span class="sb-icon">📂</span>
+          <span class="sb-text">Carregar ROM</span>
+        </button>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <span class="sidebar-label">Estados</span>
+        <button class="sidebar-btn" id="btn-save-state" title="Salvar Estado [F5]">
+          <span class="sb-icon">💾</span>
+          <span class="sb-text">Salvar Estado</span>
+          <span class="sb-hotkey">F5</span>
+        </button>
+        <button class="sidebar-btn" id="btn-load-state" title="Carregar Estado [F8]">
+          <span class="sb-icon">📥</span>
+          <span class="sb-text">Carregar Estado</span>
+          <span class="sb-hotkey">F8</span>
+        </button>
+        <button class="sidebar-btn" id="btn-export-state" title="Exportar Estado (.sav)">
+          <span class="sb-icon">⬆</span>
+          <span class="sb-text">Exportar Estado</span>
+        </button>
+        <button class="sidebar-btn" id="btn-import-state" title="Importar Estado">
+          <span class="sb-icon">⬇</span>
+          <span class="sb-text">Importar Estado</span>
+        </button>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <span class="sidebar-label">Velocidade</span>
+        <button class="sidebar-btn toggle-btn" id="btn-fast-forward" title="Fast Forward [Tab]">
+          <span class="sb-icon">⏩</span>
+          <span class="sb-text">Fast Forward</span>
+          <span class="sb-hotkey">Tab</span>
+        </button>
+        <div class="speed-selector">
+          <label class="speed-label">Velocidade:</label>
+          <div class="speed-options">
+            <button class="speed-opt" data-speed="2">2×</button>
+            <button class="speed-opt active" data-speed="4">4×</button>
+            <button class="speed-opt" data-speed="8">8×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <span class="sidebar-label">Configurações</span>
+        <button class="sidebar-btn" id="btn-controls-config" title="Configurar Controles">
+          <span class="sb-icon">⚙</span>
+          <span class="sb-text">Configurar Controles</span>
+        </button>
+        <button class="sidebar-btn" id="btn-fullscreen" title="Tela Cheia [F11]">
+          <span class="sb-icon">⛶</span>
+          <span class="sb-text">Tela Cheia</span>
+          <span class="sb-hotkey">F11</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ÁREA CENTRAL: Canvas + Drop Zone -->
+    <main class="canvas-area" id="canvas-area">
+
+      <!-- DROP ZONE (visível quando não há ROM) -->
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-zone-inner">
+          <div class="drop-icon">🎮</div>
+          <p class="drop-title">Arraste e solte uma ROM aqui</p>
+          <p class="drop-sub">Arquivos <strong>.gba</strong> são suportados</p>
+          <button class="btn btn-primary" id="btn-browse-rom">
+            Ou clique para selecionar
+          </button>
+          <p class="drop-hint">Você precisa de uma ROM legal de um jogo que você possua.</p>
+        </div>
+      </div>
+
+      <!-- CANVAS DE RENDERIZAÇÃO GBA (240×160 → escalado por CSS) -->
+      <canvas id="gba-canvas" width="240" height="160"></canvas>
+
+      <!-- OVERLAY de PAUSA -->
+      <div id="pause-overlay" class="pause-overlay hidden">
+        <span>⏸ PAUSADO</span>
+      </div>
+
+    </main>
+
+  </div><!-- /.app-body -->
+
+  <!-- CONTROLES VIRTUAIS (Mobile) -->
+  <div class="virtual-controls" id="virtual-controls">
+    <div class="vc-left">
+      <div class="dpad">
+        <button class="dpad-btn dpad-up" data-gba="up">▲</button>
+        <div class="dpad-row">
+          <button class="dpad-btn dpad-left" data-gba="left">◀</button>
+          <div class="dpad-center"></div>
+          <button class="dpad-btn dpad-right" data-gba="right">▶</button>
+        </div>
+        <button class="dpad-btn dpad-down" data-gba="down">▼</button>
+      </div>
+    </div>
+    <div class="vc-center">
+      <button class="vc-btn vc-select" data-gba="select">SELECT</button>
+      <button class="vc-btn vc-start" data-gba="start">START</button>
+    </div>
+    <div class="vc-right">
+      <div class="abxy">
+        <button class="abxy-btn btn-b" data-gba="b">B</button>
+        <button class="abxy-btn btn-a" data-gba="a">A</button>
+      </div>
+    </div>
+    <div class="vc-shoulders">
+      <button class="shoulder-btn" data-gba="l">L</button>
+      <button class="shoulder-btn" data-gba="r">R</button>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<!-- Input oculto para carregar ROM -->
+<input type="file" id="rom-file-input" accept=".gba,.bin" style="display:none" />
+<!-- Input oculto para importar savestate -->
+<input type="file" id="state-file-input" accept=".sav,.state" style="display:none" />
+
+<!-- ═══════════════════════════════════════════════════════════
+     IodineGBA — Core de emulação GBA em JS puro
+     Repositório: https://github.com/taisel/IodineGBA
+     CDN via jsDelivr (versão do fork mantido)
+     NOTA: Se o CDN falhar, baixe IodineGBA.js do GitHub e
+     coloque na mesma pasta, depois use:
+     <script src="IodineGBA.js"></script>
+     ═══════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/gh/taisel/IodineGBA@master/IodineGBA/IodineGBA.js"></script>
+
+<!-- App principal -->
+<script src="app.js"></script>
+
+</body>
+</html>
